@@ -1,0 +1,345 @@
+#$t5 stores comma count
+#$f9 stores excerpt’s average words/sentence
+#$f31 stores current author’s words/sentence
+#$f30 stores current difference
+#$f29 stores the lowest difference
+#$s4 stores the line count
+#$s5 stores the line count of the lowest difference
+#$s7 stores the newline count
+
+.data  
+	file: .asciiz "/Users/jessicamarshall/Desktop/MIPS/Ulysses.txt"
+	database: .asciiz "/Users/jessicamarshall/Desktop/MIPS/Authors.txt"
+	charstring: .asciiz "Average number of characters per word: "
+	wordstring: .asciiz "Average number of words per sentence: "
+	space: .asciiz "\n"
+	buffer: .space 2048
+	line: .asciiz "line number "
+	difference: .asciiz "difference "
+	terminate: .asciiz "program terminated"
+	buffer2: .space 2048
+.text
+
+main:
+
+li      $t1, 25	
+	mtc1      $t1, $f29
+	cvt.s.w   $f29, $f29
+
+#open a file for reading
+	li   $v0, 13       
+	la   $a0, file     # saves string address stored at "file" to $a0
+	li   $a1, 0        # Open file: flag 0 for read
+	li   $a2, 0	   # mode is ignored
+	syscall            # returns file descriptor in $v0
+	move $s6, $v0      
+
+	#read from file
+	li   $v0, 14
+	move $a0, $s6      # moves file descriptor saved from open to $a0 
+	la   $a1, buffer   # address of buffer where read info will be stored
+	li   $a2, 2048     # reads 2048 bytes
+	syscall
+
+	#close the file 
+	li   $v0, 16       
+	move $a0, $s6      # file descriptor to close
+	syscall            
+
+
+	la   $a0, buffer	#load address of buffer to $a0
+	li   $t1, 0		#initialize char count = 0
+	li   $t2, 0		#initialize word count = 0
+	li   $t3, 0		#initialize sentence count = 0
+loop:
+	lbu  $t0, 0($a0)	#load next character of a0 to t0
+	beqz $t0, nullB		#check for null character
+	beq  $t0, 32, spaceInc	#check for space
+
+	#end of phrase
+	beq  $t0, 44, pInc	# ,
+	beq  $t0, 41, pInc	# )
+	beq  $t0, 58, pInc	# :
+	beq  $t0, 59, pInc	# ;
+
+	#end of sentence
+	beq  $t0, 33, sInc	# !
+	beq  $t0, 63, sInc	# ?
+	beq  $t0, 46, sInc	# .
+
+	addi $a0, $a0, 1	#increment string pointer
+	addi $t1, $t1, 1	#increment char counter
+	j    loop		#return to top of loop
+
+
+spaceInc:
+	addi $a0, $a0, 1	#increment string pointer
+				#does NOT increment char counter 
+	addi $t2, $t2, 1	#increment word counter
+	j    loop
+
+pInc:
+	addi $a0, $a0, 1	#increment string pointer
+				#does NOT increment char counter
+	j    loop
+
+sInc:
+	addi $a0, $a0, 1	#increment string pointer
+				#does NOT increment char counter
+				#does NOT increment word counter
+	addi $t3, $t3, 1	#increment sentence counter
+	j    loop
+
+nullB:
+				#does NOT add to char or sentence count
+	addi $t2, $t2, 1	#increment word counter
+	j    math		#jump to division	
+
+math:
+	mtc1 $t3, $f0		
+	cvt.s.w $f0, $f0	#sentence count in f0
+	mtc1 $t2, $f2
+	cvt.s.w $f2, $f2	#word count in f2
+	mtc1 $t1, $f4
+	cvt.s.w $f4, $f4	#character count in f4
+	
+	la  $a0, charstring
+	li  $v0, 4
+	syscall			#prints char string
+	
+	li  $v0, 2
+	div.s $f8, $f4, $f2
+	mov.s $f12, $f8		
+	syscall			#prints chars/word
+
+	la  $a0, space
+	li  $v0, 4
+	syscall			#prints newline
+
+	la  $a0, wordstring
+	li  $v0, 4	
+	syscall			#prints string
+
+	li  $v0, 2
+	div.s $f9, $f2, $f0
+	mov.s $f12, $f9		
+	syscall			#prints words/sentence
+
+	la  $a0, space
+	li  $v0, 4
+	syscall			#prints newline
+
+#open database for reading
+	li   $v0, 13       # syscall code for open file
+	la   $a0, database # saves string address stored at “database” to $a0
+	li   $a1, 0        # Open file: flag 0 for read
+	li   $a2, 0	   # mode is ignored
+	syscall            # returns file descriptor in $v0
+	move $s6, $v0      # moves $v0 to $s6
+
+	#read from database
+	li   $v0, 14       # system call for read from file
+	move $a0, $s6      # moves file descriptor saved from open to $a0 
+	la   $a1, buffer2  # address of buffer where read info will be stored
+	li   $a2, 2048     # reads 2048 bytes
+	syscall
+
+	la       $a0, buffer2	#load address of database string to $a0
+	li       $t5, 0		#initialize 'comma count' = 0
+	li       $s4, 0	
+	li       $s7, 0		#initialize ‘newline count' = 0
+
+dloop:
+	lbu  $t0, 0($a0)	#load next character of a0 to t0
+	beqz $t0, pickauthor	#check for null character
+	beq  $t0, 44, comma	#checks for comma
+
+	addi $a0, $a0, 1	#increment string pointer
+	j    dloop		#jump to top of loop
+
+comma:
+	addi $a0, $a0, 1
+	addi $t5, $t5, 1	#add to comma count
+	beq  $t5, 2, readDec	#check if second comma
+	j    dloop
+
+readDec:
+	li    $t5, 0		#reset comma count
+	addi  $s4, $s4, 1	#increments line count to current line number
+
+
+# $a0 holds current address of character being examined
+# #t0 holds value of highest power of fraction
+# $t1 used to initialize FP values, holds ASCII value of character being examined
+# $t2 holds digit representation of character being examined
+# $t3 holds fraction digit counter - counts number of digits in fraction
+# $t4 indicates whether the characters to follow are fraction (t5 = 1, following chars are fraction)
+
+# $f0 holds 10 - used for multiplication
+# $f1 holds 'running tally' of mantissa value of number
+# $f2 holds 'running tally' of fraction digits following decimal point
+# $f3 works like a temp: current digit is converted to FP there and is added to 'running tally'
+# $f4 holds fraction as a fraction of 1
+#
+# $f12 is the syscall float to be printed
+# $f31 holds converted floating point value!
+
+	
+	li        $t1, 10		# for multiplication- $f0 holds 10
+	mtc1      $t1, $f0
+	cvt.s.w   $f0, $f0
+
+	li        $t1, 0		# $f1 holds floating point rep of mantissa
+	mtc1      $t1, $f1
+	cvt.s.w   $f1, $f1
+
+	li        $t1, 0		# $f2 holds floating point rep of fraction
+	mtc1      $t1, $f2
+	cvt.s.w   $f2, $f2
+	
+	li        $t3, 0		#fraction digit counter
+	li        $t4, 0		#t4 = 1, next char is fraction.
+
+readLoop:
+	lbu       $t1, 0($a0)
+	bne       $t1, 46, skipDot	#if char is decimal point, next chars are fraction
+	li        $t4, 1		#next char is fraction
+	j         NextChar
+
+skipDot:
+	beq       $t1, 10, FinishNumber	#if next char is new line, write the number
+	beqz 	  $t1, FinishNumber	#if next char is null, write the number
+	beq       $t4, 1, readFrac	#if next char is frac, jump
+
+readInt:
+	addi      $t2, $t1, -48		#convert ascii to number, store in t2
+	mtc1      $t2, $f3		#move number to f3
+	cvt.s.w   $f3, $f3		#convert int to FP
+	mul.s     $f1, $f1, $f0		#multiply
+	add.s     $f1, $f1, $f3		#add f1 and f3
+	j         NextChar
+readFrac:
+	addi      $t2, $t1, -48		#convert ascii to number
+	mtc1      $t2, $f3		#move number to f3
+	cvt.s.w   $f3, $f3		#convert int to float
+	mul.s     $f2, $f2, $f0
+	add.s     $f2, $f2, $f3
+	addi      $t3, $t3, 1		#increment fraction digit counter
+	j         NextChar
+NextChar:
+	addiu     $a0, $a0, 1		#next address
+	j         readLoop
+
+
+FinishNumber:
+	li        $t0, 1		#loads 1 to t0
+	mtc1	  $t0, $f4		#converts 1 to FP
+	cvt.s.w   $f4, $f4
+FracLoop:				#creates power of 10 by which to divide fraction
+	mul.s     $f4, $f4, $f0	
+	addi      $t3, $t3, -1		#decrement fraction digits counter
+	bgtz	  $t3, FracLoop
+
+	div.s	  $f2, $f2, $f4		#f2 = fracpart/fracdigitsx10
+	add.s 	  $f1, $f1, $f2		#f1 = int part + frac part
+	mov.s     $f31, $f1		#f31 = converted string
+	
+	addiu     $a0, $a0, 1		#increments string pointer again - to move past newline
+
+	j compareavg
+
+compareavg:
+
+	c.ngt.s   $f31, $f9  #$f9 >= $f31
+	bc1t      subtract1
+	bc1f      subtract2
+
+subtract1:
+	sub.s $f30, $f9, $f31
+	j    comparediff
+	
+subtract2:
+	sub.s $f30, $f31, $f9
+	j    comparediff
+
+comparediff:
+	c.ngt.s   $f29, $f30  #$f30 >= $f29
+	bc1t dloop
+
+	move  $s5, $s4
+	mov.s $f29, $f30
+	j    dloop
+
+
+pickauthor:
+		
+	la	$a1, buffer2
+	li 	$t6, 1			# set newline counter = 0
+	
+authLoop:
+	lbu	$t0, 0($a1)		# load next character of a0 to t0
+	beq	$t0, 10, nline		# branch if newline
+	beq	$t6, $s5, PrintingChars	# branch if we've reached newlines
+	addi	$a1, $a1, 1
+	j	authLoop
+
+PrintingChars:
+	beq	$t0, 44, exit		# if comma, author has been printed
+	move	$t1, $a1
+	lb	$a0, ($t1)
+	li	$v0, 11			
+	syscall				# prints current character
+	addi	$a1, $a1, 1		# increment string pointer
+	j	authLoop	
+
+nline:
+	addi	$t6, $t6, 1		# have reached (t6) newlines
+	addi	$a1, $a1, 1		# increment string pointer	
+	j	authLoop
+	
+	
+exit:
+	mov.s $f12, $f29	#move smallest difference to be printed
+
+	li $v0, 4
+	la  $a0, space
+	syscall	
+
+	#print line number
+	li $v0, 4
+	la $a0, line
+	syscall	
+	
+	li $v0, 1
+	move  $a0, $s5		#move smallest difference line to be printed
+	syscall
+
+	li $v0, 4
+	la  $a0, space
+	syscall	
+
+	#print difference
+	li $v0, 4
+	la $a0, difference
+	syscall	
+
+	li $v0, 2
+	syscall
+
+	li $v0, 4
+	la  $a0, space
+	syscall	
+	
+	li $v0, 4
+	la $a0, terminate
+	syscall
+
+	li $v0, 10
+	syscall
+	
+	
+	
+
+
+
+	
