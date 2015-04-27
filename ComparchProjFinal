@@ -1,0 +1,178 @@
+# Jessica Marshall and Sara Morini
+# ECE151 Final Project
+#
+# This file opens the author excerpt stored in file and stores the contents in memory as a string,
+# then loops through the string and counts the number of characters in words based on 
+# spaces, punctuation, and null characters. It performs arithmetic to determine the average
+# number of characters per word and words per sentence.
+# 
+# $t1 stores total character count in excerpt
+# $t2 stores total word count in excerpt
+# $t3 stores total sentence count in excerpt
+# $f8 stores average number of characters/word
+# $f9 stores average number of words/sentence
+
+.data  
+	file: .asciiz "/Users/jessicamarshall/Desktop/MIPS/Ulysses.txt"
+	database: .asciiz "/Users/jessicamarshall/Desktop/MIPS/Authors.txt"
+	charstring: .asciiz "Average number of characters per word: "
+	wordstring: .asciiz "Average number of words per sentence: "
+	space: .asciiz "\n"
+	buffer: .space 2048
+	buffer2: .space 2048
+	terminate: .asciiz "program terminated"
+.text
+
+main:
+	#open a file for reading
+	li   $v0, 13       
+	la   $a0, file     # saves string address stored at "file" to $a0
+	li   $a1, 0        # Open file: flag 0 for read
+	li   $a2, 0	   # mode is ignored
+	syscall            # returns file descriptor in $v0
+	move $s6, $v0      
+
+	#read from file
+	li   $v0, 14
+	move $a0, $s6      # moves file descriptor saved from open to $a0 
+	la   $a1, buffer   # address of buffer where read info will be stored
+	li   $a2, 2048     # reads 2048 bytes
+	syscall
+
+	#prints file contents to console
+	#not necessary but lets us know that the contents of the file are in memory
+	li   $v0, 4	   
+	la   $a0, buffer
+	syscall
+	
+	la  $a0, space
+	li  $v0, 4
+	syscall		   
+	syscall	 	   #prints 2 newlines	
+
+	#close the file 
+	li   $v0, 16       
+	move $a0, $s6      # file descriptor to close
+	syscall            
+
+
+	la   $a0, buffer	#load address of buffer to $a0
+	li   $t1, 0		#initialize char count = 0
+	li   $t2, 0		#initialize word count = 0
+	li   $t3, 0		#initialize sentence count = 0
+loop:
+	lbu  $t0, 0($a0)	#load next character of a0 to t0
+	beqz $t0, nullB		#check for null character
+	beq  $t0, 32, spaceInc	#check for space
+
+	#end of phrase
+	beq  $t0, 44, pInc	# ,
+	beq  $t0, 41, pInc	# )
+	beq  $t0, 58, pInc	# :
+	beq  $t0, 59, pInc	# ;
+
+	#end of sentence
+	beq  $t0, 33, sInc	# !
+	beq  $t0, 63, sInc	# ?
+	beq  $t0, 46, sInc	# .
+
+	addi $a0, $a0, 1	#increment string pointer
+	addi $t1, $t1, 1	#increment char counter
+	j    loop		#return to top of loop
+
+
+spaceInc:
+	addi $a0, $a0, 1	#increment string pointer
+				#does NOT increment char counter 
+	addi $t2, $t2, 1	#increment word counter
+	j    loop
+
+pInc:
+	addi $a0, $a0, 1	#increment string pointer
+				#does NOT increment char counter
+	j    loop
+
+sInc:
+	addi $a0, $a0, 1	#increment string pointer
+				#does NOT increment char counter
+				#does NOT increment word counter
+	addi $t3, $t3, 1	#increment sentence counter
+	j    loop
+
+nullB:
+				#does NOT add to char or sentence count
+	addi $t2, $t2, 1	#increment word counter
+	j    math		#jump to division	
+
+math:
+	mtc1 $t3, $f0		
+	cvt.s.w $f0, $f0	#sentence count in f0
+	mtc1 $t2, $f2
+	cvt.s.w $f2, $f2	#word count in f2
+	mtc1 $t1, $f4
+	cvt.s.w $f4, $f4	#character count in f4
+	
+	la  $a0, charstring
+	li  $v0, 4
+	syscall			#prints char string
+	
+	li  $v0, 2
+	div.s $f8, $f4, $f2
+	mov.s $f12, $f8		
+	syscall			#prints chars/word
+
+	la  $a0, space
+	li  $v0, 4
+	syscall			#prints newline
+
+	la  $a0, wordstring
+	li  $v0, 4	
+	syscall			#prints string
+
+	li  $v0, 2
+	div.s $f9, $f2, $f0
+	mov.s $f12, $f9		
+	syscall			#prints words/sentence
+
+	la  $a0, space
+	li  $v0, 4
+	syscall			#prints newline
+	j    authors
+
+authors:
+	#open database for reading
+	li   $v0, 13       # syscall code for open file
+	la   $a0, database # saves string address stored at “database” to $a0
+	li   $a1, 0        # Open file: flag 0 for read
+	li   $a2, 0	   # mode is ignored
+	syscall            # returns file descriptor in $v0
+	move $s6, $v0      # moves $v0 to $s6
+
+	#read from database
+	li   $v0, 14       # system call for read from file
+	move $a0, $s6      # moves file descriptor saved from open to $a0 
+	la   $a1, buffer2  # address of buffer where read info will be stored
+	li   $a2, 2048     # reads 2048 bytes
+	syscall
+
+	#prints database contents to console
+	#don’t need but let’s us know that the contents of the file are in memory
+	li   $v0, 4	   #syscall code for read string
+	la   $a0, buffer2
+	syscall
+	
+	la  $a0, space
+	li  $v0, 4
+	syscall			#prints newline
+	syscall			#prints newline	
+	j    exit
+
+
+exit:
+	li $v0, 4
+	la $a0, terminate
+	syscall
+
+	li $v0, 10
+	syscall
+	
